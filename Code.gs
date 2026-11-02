@@ -1,9 +1,10 @@
 /**
- * LINE 智慧課堂筆記與待辦小秘書（期中專題整合版）
+ * LINE 智慧大學生活與課堂全能助理（期中專題三合一整合版）
  * 核心特色：
- *   1. 「筆記 …」或拍照片：自動利用 Gemini 萃取整理課程重點，雙軌寫入試算表並自動同步存入本機筆記庫。
- *   2. 「複習 …」或「查 …」：透由 Cloudflare 通道呼叫本機端轉接站，由本地模型 (Gemma 4) 檢索上課筆記並附出處回覆。
- *   3. 一般待辦行程：自動分析日期時間，排入 Google 日曆與試算表。
+ *   1. 【課堂筆記本】分頁：輸入「筆記 ...」或拍簡報，自動萃取重點存入試算表並即時備份至電腦本地筆記庫。
+ *   2. 【考前秒複習】：輸入「複習 ...」，透由安全通道呼叫本機小模型 (Gemma 4) 全文檢索本地筆記並標註出處回答。
+ *   3. 【收支記帳簿】分頁：輸入「記帳 午餐 100」或拍發票明細，自動歸類金額寫入同試算表；輸入「查帳」秒算今日花費。
+ *   4. 【待辦事項】分頁：自然語言排程，自動分析日期時間寫入試算表並同步 Google 日曆。
  */
 
 const PROPS = PropertiesService.getScriptProperties();
@@ -16,10 +17,12 @@ const SEARCH_RELAY_KEY = (PROPS.getProperty("SEARCH_RELAY_KEY") || "").trim();
 
 const REVIEW_PREFIX = /^(?:複習|查|搜尋)[\s:：]+([\s\S]+)$/;
 const NOTE_PREFIX = /^(?:筆記|記筆記|重點)[\s:：]+([\s\S]+)$/;
+const EXPENSE_PREFIX = /^(?:記帳|花費|支出|買了|吃|喝)[\s:：]+([\s\S]+)$/;
+const CHECK_EXPENSE = /^(?:查帳|今天花了多少|今日花費|總花費|記帳查詢)$/;
 
 const TZ = "Asia/Taipei";
 const GREETING = /^(hi|hello|hey|你好|嗨|哈囉|安安|早安|午安|晚安|謝謝|感謝|ok|好的|掰|bye|test|測試)$/i;
-const HELP_TEXT = "你好！我是你的【智慧課堂筆記與待辦小秘書】🎓\n\n你可以這樣使用：\n1. 存筆記：輸入「筆記 機器學習三要素是...」或拍黑板簡報，我會幫你整理歸檔！\n2. 考前複習：輸入「複習 什麼是機器學習三要素？」，我會翻出你的筆記重點回答你！\n3. 記待辦：輸入「明天下午三點要開會」，自動記進試算表與 Google 日曆。";
+const HELP_TEXT = "你好！我是你的【智慧生活與課堂全能助理】🎓💰\n\n同一個試算表幫你管好三大生活需求：\n\n1. 📖 筆記：「筆記 機器學習三要素是...」或拍簡報\n2. 🔍 複習：「複習 機器學習三要素是什麼？」本機模型秒回答\n3. 💸 記帳：「記帳 午餐排骨便當 100」或拍發票明細\n4. 📊 查帳：輸入「查帳」或「今天花了多少」\n5. 🗓️ 待辦：「明天下午三點要開會」自動排日曆";
 
 function doPost(e) {
   try {
@@ -32,7 +35,7 @@ function doPost(e) {
 }
 
 function doGet() {
-  return ContentService.createTextOutput("智慧課堂筆記與待辦小秘書服務運作中（期中專題版）");
+  return ContentService.createTextOutput("全能助理運作中（筆記 ✕ 記帳 ✕ 待辦 三合一版）");
 }
 
 function handleEvent(event) {
@@ -43,21 +46,38 @@ function handleEvent(event) {
       const text = msg.text.trim();
       if (GREETING.test(text)) return replyLine(event.replyToken, HELP_TEXT);
 
-      // 分支 1：考前複習 / 知識庫檢索（轉交本機轉接站）
+      // 分支 1：考前複習 / 本機問答
       const reviewMatch = text.match(REVIEW_PREFIX);
       if (reviewMatch) {
         showLoading(event.source, 60);
         return replyLine(event.replyToken, askLocalRelay(reviewMatch[1].trim()));
       }
 
-      // 分支 2：新增筆記重點
+      // 分支 2：新增課堂筆記
       const noteMatch = text.match(NOTE_PREFIX);
       if (noteMatch) {
         showLoading(event.source);
         return saveNoteAndReply(event.replyToken, noteMatch[1].trim(), "手動輸入");
       }
 
-      // 分支 3：一般文字待辦事項
+      // 分支 3：查帳（今日消費統計）
+      if (CHECK_EXPENSE.test(text)) {
+        showLoading(event.source);
+        return replyLine(event.replyToken, calculateTodayExpenses());
+      }
+
+      // 分支 4：記帳（支出記錄）
+      const expenseMatch = text.match(EXPENSE_PREFIX);
+      if (expenseMatch || /\d+元?$/.test(text)) {
+        showLoading(event.source);
+        const expenseContent = expenseMatch ? expenseMatch[1].trim() : text;
+        const parsedExpense = askGeminiAboutExpense(expenseContent);
+        if (parsedExpense.isExpense) {
+          return saveExpenseAndReply(event.replyToken, parsedExpense);
+        }
+      }
+
+      // 分支 5：一般待辦事項與行程
       showLoading(event.source);
       return saveAndReply(event.replyToken, askGeminiAboutText(text), "文字");
     }
@@ -66,15 +86,17 @@ function handleEvent(event) {
       showLoading(event.source);
       const image = downloadLineImage(msg.id);
       const photoUrl = savePhotoToDrive(image);
-      // AI 智慧判斷圖片是否為課堂簡報/筆記
+      // AI 智慧分析圖片：是發票/收據？還是課堂筆記簡報？抑或便條紙？
       const analysis = askGeminiAboutImage(image);
-      if (analysis.isNote) {
+      if (analysis.type === "expense") {
+        return saveExpenseAndReply(event.replyToken, analysis, photoUrl);
+      } else if (analysis.type === "note") {
         return saveNoteAndReply(event.replyToken, analysis.noteContent, "拍照識別", photoUrl, analysis.summary);
       }
       return saveAndReply(event.replyToken, analysis, "照片", photoUrl);
     }
 
-    replyLine(event.replyToken, "目前我支援文字訊息與筆記照片喔！");
+    replyLine(event.replyToken, "目前我支援文字訊息、發票照片與筆記照片喔！");
   } catch (err) {
     console.error("處理異常：", err);
     try {
@@ -83,23 +105,85 @@ function handleEvent(event) {
   }
 }
 
-// 儲存筆記至試算表與本機轉接站
+// 取得同一個試算表中的指定分頁
+function getSheet(sheetName) {
+  const ss = SHEET_ID ? SpreadsheetApp.openById(SHEET_ID) : SpreadsheetApp.getActiveSpreadsheet();
+  if (!ss) throw new Error("找不到試算表");
+  let sheet = ss.getSheetByName(sheetName);
+  if (!sheet) {
+    sheet = ss.insertSheet(sheetName);
+    if (sheetName === "收支記帳簿") {
+      sheet.appendRow(["記帳時間", "消費項目", "金額", "分類", "付款備註", "發票照片"]);
+      sheet.getRange(1, 1, 1, 6).setFontWeight("bold").setBackground("#D97706").setFontColor("#FFFFFF");
+    } else if (sheetName === "課堂筆記本") {
+      sheet.appendRow(["記錄時間", "筆記主題", "詳細內容", "來源類型", "照片連結"]);
+      sheet.getRange(1, 1, 1, 5).setFontWeight("bold").setBackground("#2E7D32").setFontColor("#FFFFFF");
+    } else {
+      sheet.appendRow(["建立時間", "事項", "分類", "日期", "時間", "來源", "日曆", "照片連結"]);
+      sheet.getRange(1, 1, 1, 8).setFontWeight("bold").setBackground("#0E7C7B").setFontColor("#FFFFFF");
+    }
+  }
+  return sheet;
+}
+
+// ===== 記帳功能處理 =====
+function saveExpenseAndReply(replyToken, expense, photoUrl) {
+  const sheet = getSheet("收支記帳簿");
+  const now = Utilities.formatDate(new Date(), TZ, "yyyy-MM-dd HH:mm:ss");
+  sheet.appendRow([now, expense.item, expense.amount, expense.category, expense.note || "", photoUrl || ""]);
+  const row = sheet.getLastRow();
+
+  let reply = `💸 記帳成功！（記帳簿第 ${row} 列）\n\n🛒 品項：${expense.item}\n💵 金額：$${expense.amount} 元\n🏷️ 分類：${expense.category}`;
+  if (photoUrl) reply += "\n🧾 發票照片已存入 Google Drive";
+  reply += "\n\n💡 提示：輸入「今天花了多少」隨時查看累計花費！";
+  replyLine(replyToken, reply);
+}
+
+function calculateTodayExpenses() {
+  const sheet = getSheet("收支記帳簿");
+  const data = sheet.getDataRange().getValues();
+  if (data.length <= 1) return "📊 目前「收支記帳簿」還沒有任何花費紀錄喔！";
+
+  const todayStr = Utilities.formatDate(new Date(), TZ, "yyyy-MM-dd");
+  let total = 0;
+  const items = [];
+
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    const timeStr = String(row[0]);
+    if (timeStr.startsWith(todayStr)) {
+      const amount = Number(row[2]) || 0;
+      total += amount;
+      items.push(`• ${row[1]}：$${amount}`);
+    }
+  }
+
+  if (items.length === 0) return `📊 今天（${todayStr}）還沒有記帳紀錄喔！`;
+  return `📊 今日（${todayStr}）累計花費：$${total} 元\n\n今日明細：\n${items.join("\n")}`;
+}
+
+function askGeminiAboutExpense(text) {
+  const prompt = `你是記帳助手。請分析使用者的支出描述，只回傳單一 JSON 物件：
+{"isExpense": true或false, "item": "品項名稱", "amount": 數字純阿拉伯數字, "category": "飲食/課業/交通/娛樂/日用品/其他", "note": "備註"}
+使用者說：${text}`;
+  return callGemini([{ text: prompt }]);
+}
+
+// ===== 筆記功能處理 =====
 function saveNoteAndReply(replyToken, content, source, photoUrl, summary) {
   const ss = getSheet("課堂筆記本");
   const now = Utilities.formatDate(new Date(), TZ, "yyyy-MM-dd HH:mm:ss");
   const title = summary || content.slice(0, 20).replace(/[\r\n]/g, " ");
   ss.appendRow([now, title, content, source, photoUrl || ""]);
 
-  // 同步推送至本地電腦轉接站備份
   syncNoteToLocal(title, content);
 
-  let reply = `📝 筆記已成功儲存！\n\n📌 摘要：${title}\n📖 內容：${content.slice(0, 100)}${content.length > 100 ? "..." : ""}`;
-  if (photoUrl) reply += "\n📷 筆記照片已同步備份至 Google Drive";
+  let reply = `📝 筆記已成功儲存至試算表！\n\n📌 摘要：${title}\n📖 內容：${content.slice(0, 100)}${content.length > 100 ? "..." : ""}`;
+  if (photoUrl) reply += "\n📷 筆記照片已備份至 Google Drive";
   reply += "\n\n💡 提示：輸入「複習 " + title.slice(0, 6) + "」隨時考考小秘書！";
   replyLine(replyToken, reply);
 }
 
-// 同步筆記至本機轉接站
 function syncNoteToLocal(title, content) {
   if (!SEARCH_RELAY_URL || !SEARCH_RELAY_KEY) return;
   try {
@@ -112,11 +196,10 @@ function syncNoteToLocal(title, content) {
       timeoutSeconds: 15
     });
   } catch (e) {
-    console.warn("同步至本地筆記庫失敗（本機可能未開機）：", e.message);
+    console.warn("同步本地失敗：", e.message);
   }
 }
 
-// 呼叫本機轉接站問答
 function askLocalRelay(question) {
   if (!SEARCH_RELAY_URL || !SEARCH_RELAY_KEY) {
     return "💡 尚未設定本地問答通道（請確認指令碼屬性 SEARCH_RELAY_URL 與 KEY）。";
@@ -150,24 +233,7 @@ function askLocalRelay(question) {
   return reply + `\n（本地模型推論：${data.seconds} 秒）`;
 }
 
-// 試算表存取（支援多頁籤）
-function getSheet(sheetName) {
-  const ss = SHEET_ID ? SpreadsheetApp.openById(SHEET_ID) : SpreadsheetApp.getActiveSpreadsheet();
-  if (!ss) throw new Error("找不到試算表");
-  let sheet = ss.getSheetByName(sheetName || "待辦事項");
-  if (!sheet) {
-    sheet = ss.insertSheet(sheetName || "待辦事項");
-    if (sheetName === "課堂筆記本") {
-      sheet.appendRow(["記錄時間", "筆記主題", "詳細內容", "來源類型", "照片連結"]);
-      sheet.getRange(1, 1, 1, 5).setFontWeight("bold").setBackground("#2E7D32").setFontColor("#FFFFFF");
-    } else {
-      sheet.appendRow(["建立時間", "事項", "分類", "日期", "時間", "來源", "日曆", "照片連結"]);
-      sheet.getRange(1, 1, 1, 8).setFontWeight("bold").setBackground("#0E7C7B").setFontColor("#FFFFFF");
-    }
-  }
-  return sheet;
-}
-
+// ===== 待辦功能處理 =====
 function saveAndReply(replyToken, todo, source, photoUrl) {
   if (!todo.isTodo) return replyLine(replyToken, todo.chatReply || HELP_TEXT);
   const sheet = getSheet("待辦事項");
@@ -176,7 +242,7 @@ function saveAndReply(replyToken, todo, source, photoUrl) {
   const row = sheet.getLastRow();
   const wantsCalendar = todo.date !== "未指定" && todo.time !== "未指定";
 
-  let reply = `✅ 待辦已記好（試算表第 ${row} 列）\n\n📌 ${todo.summary}\n🏷️ ${todo.category}\n📅 ${todo.date}　⏰ ${todo.time}`;
+  let reply = `✅ 待辦已記好（待辦表第 ${row} 列）\n\n📌 ${todo.summary}\n🏷️ ${todo.category}\n📅 ${todo.date}　⏰ ${todo.time}`;
   if (wantsCalendar) {
     reply += "\n🗓️ 行程提醒已同步排入 Google 日曆";
     createCalendarEvent(todo);
@@ -185,11 +251,11 @@ function saveAndReply(replyToken, todo, source, photoUrl) {
 }
 
 function savePhotoToDrive(blob) {
-  const folderName = "LINE筆記與待辦照片";
+  const folderName = "LINE大學生活檔案夾";
   const found = DriveApp.getFoldersByName(folderName);
   const folder = found.hasNext() ? found.next() : DriveApp.createFolder(folderName);
   const stamp = Utilities.formatDate(new Date(), TZ, "yyyyMMdd-HHmmss");
-  const file = folder.createFile(blob.setName("note-" + stamp + ".jpg"));
+  const file = folder.createFile(blob.setName("upload-" + stamp + ".jpg"));
   return file.getUrl();
 }
 
@@ -198,7 +264,7 @@ function createCalendarEvent(todo) {
     const start = new Date(`${todo.date}T${todo.time}:00+08:00`);
     const end = new Date(start.getTime() + 30 * 60 * 1000);
     CalendarApp.getDefaultCalendar().createEvent(`【${todo.category}】${todo.summary}`, start, end, {
-      description: "由 LINE 智慧課堂筆記與待辦小秘書建立"
+      description: "由 LINE 智慧大學生活與課堂全能助理建立"
     });
   } catch (err) {}
 }
@@ -212,17 +278,18 @@ function askGeminiAboutText(text) {
 }
 
 function askGeminiAboutImage(blob) {
-  const prompt = `你是課堂助理。請分析這張照片是一般待辦便條紙，還是上課簡報/課堂筆記？
+  const prompt = `你是大學生多功能助理。分析這張圖片是：發票/收據明細、課堂簡報/黑板筆記、還是行程便條紙？
 只輸出單一 JSON 物件：
 {
-  "isNote": true或false,
+  "type": "expense" 或 "note" 或 "todo",
+  "item": "發票上的主要品項，無則空",
+  "amount": 發票總金額純阿拉伯數字無則0,
+  "category": "飲食/課業/交通/其他",
   "summary": "主題簡述",
-  "noteContent": "如果是筆記，詳細條列萃取關鍵內容與重點；非筆記填空字串",
+  "noteContent": "如果是筆記，詳細條列核心知識點",
   "isTodo": true或false,
-  "category": "課業",
   "date": "YYYY-MM-DD或未指定",
-  "time": "HH:mm或未指定",
-  "chatReply": "簡短說明"
+  "time": "HH:mm或未指定"
 }`;
   return callGemini([
     { text: prompt },
