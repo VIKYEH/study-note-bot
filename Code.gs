@@ -1,9 +1,11 @@
 /**
- * LINE 智慧大學生活與課堂全能助理（期中專題三合一整合版）
+ * LINE 智慧大學生活與課堂全能助理（期中專題完整版）
  * 核心特色：
- *   1. 【課堂筆記本】分頁：輸入「筆記 ...」或拍簡報，自動萃取重點存入試算表並即時備份至電腦本地筆記庫。
+ *   1. 【課堂筆記本】分頁：
+ *      - 存筆記：輸入「筆記 ...」或拍簡報，自動萃取重點存入試算表並即時備份至本機。
+ *      - 查筆記：輸入「查詢筆記 機器學習」或「筆記清單」，秒列符合的筆記列表與照片連結！
  *   2. 【考前秒複習】：輸入「複習 ...」，透由安全通道呼叫本機小模型 (Gemma 4) 全文檢索本地筆記並標註出處回答。
- *   3. 【收支記帳簿】分頁：輸入「記帳 午餐 100」或拍發票明細，自動歸類金額寫入同試算表；輸入「查帳」秒算今日花費。
+ *   3. 【收支記帳簿】分頁：輸入「記帳 午餐 100」或拍發票明細，自動歸類寫入同試算表；輸入「查帳」秒算今日花費。
  *   4. 【待辦事項】分頁：自然語言排程，自動分析日期時間寫入試算表並同步 Google 日曆。
  */
 
@@ -15,14 +17,15 @@ const GEMINI_MODEL = PROPS.getProperty("GEMINI_MODEL") || "gemini-3.5-flash-lite
 const SEARCH_RELAY_URL = (PROPS.getProperty("SEARCH_RELAY_URL") || "").trim().replace(/\/+$/, "");
 const SEARCH_RELAY_KEY = (PROPS.getProperty("SEARCH_RELAY_KEY") || "").trim();
 
-const REVIEW_PREFIX = /^(?:複習|查|搜尋)[\s:：]+([\s\S]+)$/;
+const REVIEW_PREFIX = /^(?:複習|考考我)[\s:：]+([\s\S]+)$/;
+const SEARCH_NOTE_PREFIX = /^(?:查詢筆記|找筆記|搜尋筆記|筆記查詢|所有筆記|筆記清單|看筆記)[\s:：]*([\s\S]*)$/;
 const NOTE_PREFIX = /^(?:筆記|記筆記|重點)[\s:：]+([\s\S]+)$/;
 const EXPENSE_PREFIX = /^(?:記帳|花費|支出|買了|吃|喝)[\s:：]+([\s\S]+)$/;
 const CHECK_EXPENSE = /^(?:查帳|今天花了多少|今日花費|總花費|記帳查詢)$/;
 
 const TZ = "Asia/Taipei";
 const GREETING = /^(hi|hello|hey|你好|嗨|哈囉|安安|早安|午安|晚安|謝謝|感謝|ok|好的|掰|bye|test|測試)$/i;
-const HELP_TEXT = "你好！我是你的【智慧生活與課堂全能助理】🎓💰\n\n同一個試算表幫你管好三大生活需求：\n\n1. 📖 筆記：「筆記 機器學習三要素是...」或拍簡報\n2. 🔍 複習：「複習 機器學習三要素是什麼？」本機模型秒回答\n3. 💸 記帳：「記帳 午餐排骨便當 100」或拍發票明細\n4. 📊 查帳：輸入「查帳」或「今天花了多少」\n5. 🗓️ 待辦：「明天下午三點要開會」自動排日曆";
+const HELP_TEXT = "你好！我是你的【智慧生活與課堂全能助理】🎓💰\n\n同一個試算表幫你管好四大生活需求：\n\n1. 📖 存筆記：「筆記 機器學習三要素是...」或拍簡報照片\n2. 📑 查筆記：「查詢筆記 機器學習」或「筆記清單」列出摘要與照片\n3. 🔍 考前複習：「複習 機器學習三要素是什麼？」本機模型秒回答\n4. 💸 記帳：「記帳 午餐排骨便當 100」或拍發票明細\n5. 📊 查帳：「查帳」或「今天花了多少」\n6. 🗓️ 待辦：「明天下午三點要開會」自動排日曆";
 
 function doPost(e) {
   try {
@@ -35,7 +38,7 @@ function doPost(e) {
 }
 
 function doGet() {
-  return ContentService.createTextOutput("全能助理運作中（筆記 ✕ 記帳 ✕ 待辦 三合一版）");
+  return ContentService.createTextOutput("全能助理運作中（筆記檢索 ✕ 本機問答 ✕ 記帳 ✕ 待辦 整合版）");
 }
 
 function handleEvent(event) {
@@ -46,27 +49,34 @@ function handleEvent(event) {
       const text = msg.text.trim();
       if (GREETING.test(text)) return replyLine(event.replyToken, HELP_TEXT);
 
-      // 分支 1：考前複習 / 本機問答
+      // 分支 1：考前複習 / 本機問答 (由本機 Gemma 4 推論)
       const reviewMatch = text.match(REVIEW_PREFIX);
       if (reviewMatch) {
         showLoading(event.source, 60);
         return replyLine(event.replyToken, askLocalRelay(reviewMatch[1].trim()));
       }
 
-      // 分支 2：新增課堂筆記
+      // 分支 2：查詢筆記清單 (直接檢索試算表筆記本)
+      const searchNoteMatch = text.match(SEARCH_NOTE_PREFIX);
+      if (searchNoteMatch) {
+        showLoading(event.source);
+        return replyLine(event.replyToken, queryNotesFromSheet(searchNoteMatch[1].trim()));
+      }
+
+      // 分支 3：新增課堂筆記
       const noteMatch = text.match(NOTE_PREFIX);
       if (noteMatch) {
         showLoading(event.source);
         return saveNoteAndReply(event.replyToken, noteMatch[1].trim(), "手動輸入");
       }
 
-      // 分支 3：查帳（今日消費統計）
+      // 分支 4：查帳（今日消費統計）
       if (CHECK_EXPENSE.test(text)) {
         showLoading(event.source);
         return replyLine(event.replyToken, calculateTodayExpenses());
       }
 
-      // 分支 4：記帳（支出記錄）
+      // 分支 5：記帳（支出記錄）
       const expenseMatch = text.match(EXPENSE_PREFIX);
       if (expenseMatch || /\d+元?$/.test(text)) {
         showLoading(event.source);
@@ -77,7 +87,7 @@ function handleEvent(event) {
         }
       }
 
-      // 分支 5：一般待辦事項與行程
+      // 分支 6：一般待辦事項與行程
       showLoading(event.source);
       return saveAndReply(event.replyToken, askGeminiAboutText(text), "文字");
     }
@@ -124,6 +134,42 @@ function getSheet(sheetName) {
     }
   }
   return sheet;
+}
+
+// ===== 查詢筆記功能 =====
+function queryNotesFromSheet(keyword) {
+  const sheet = getSheet("課堂筆記本");
+  const data = sheet.getDataRange().getValues();
+  if (data.length <= 1) return "📚 目前「課堂筆記本」還沒有任何筆記紀錄喔！可傳「筆記 [重點]」開始記錄。";
+
+  const kw = (keyword || "").toLowerCase().trim();
+  const results = [];
+
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    const time = String(row[0]).slice(0, 10);
+    const title = String(row[1]);
+    const content = String(row[2]);
+    const photo = String(row[4]);
+
+    if (!kw || title.toLowerCase().includes(kw) || content.toLowerCase().includes(kw)) {
+      results.push({ time, title, content: content.slice(0, 60), photo });
+    }
+  }
+
+  if (results.length === 0) {
+    return `🔍 在筆記本中沒有找到包含「${keyword}」的筆記。\n💡 建議換個關鍵字，或直接輸入「筆記清單」查看全部。`;
+  }
+
+  let reply = `📚 ${kw ? `找到 ${results.length} 筆包含「${keyword}」的課堂筆記：` : `為您列出最近的 ${Math.min(results.length, 5)} 筆筆記：`}\n`;
+  const showList = results.slice(-5).reverse();
+  showList.forEach((r, idx) => {
+    reply += `\n${idx + 1}. 📌【${r.title}】(${r.time})\n   📖 ${r.content}${r.content.length >= 60 ? "..." : ""}`;
+    if (r.photo) reply += `\n   📷 照片：${r.photo}`;
+  });
+
+  reply += `\n\n💡 想要問答複習，可直接傳：「複習 ${kw || showList[0].title.slice(0, 6)}」考考本地助教！`;
+  return reply;
 }
 
 // ===== 記帳功能處理 =====
@@ -180,7 +226,7 @@ function saveNoteAndReply(replyToken, content, source, photoUrl, summary) {
 
   let reply = `📝 筆記已成功儲存至試算表！\n\n📌 摘要：${title}\n📖 內容：${content.slice(0, 100)}${content.length > 100 ? "..." : ""}`;
   if (photoUrl) reply += "\n📷 筆記照片已備份至 Google Drive";
-  reply += "\n\n💡 提示：輸入「複習 " + title.slice(0, 6) + "」隨時考考小秘書！";
+  reply += "\n\n💡 提示：輸入「查詢筆記」可看清單，輸入「複習 " + title.slice(0, 6) + "」考考小秘書！";
   replyLine(replyToken, reply);
 }
 
@@ -285,8 +331,8 @@ function askGeminiAboutImage(blob) {
   "item": "發票上的主要品項，無則空",
   "amount": 發票總金額純阿拉伯數字無則0,
   "category": "飲食/課業/交通/其他",
-  "summary": "主題簡述",
-  "noteContent": "如果是筆記，詳細條列核心知識點",
+  "summary": "主題簡述，如果字太模糊填寫照片待補充",
+  "noteContent": "如果是筆記，詳細條列核心知識點；若模糊則提示使用者照片已存請補說明",
   "isTodo": true或false,
   "date": "YYYY-MM-DD或未指定",
   "time": "HH:mm或未指定"
