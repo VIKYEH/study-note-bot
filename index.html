@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>智慧課堂筆記與待辦小秘書 - 開發紀錄與成果展示</title>
+  <style>
+    :root {
+      --primary: #2563eb;
+      --primary-light: #dbeafe;
+      --success: #16a34a;
+      --warning: #f59e0b;
+      --bg: #f8fafc;
+      --card-bg: #ffffff;
+      --text: #1e293b;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      padding: 24px;
+    }
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    header {
+      background: linear-gradient(135deg, #1e3a8a, #3b82f6);
+      color: white;
+      padding: 40px 32px;
+      border-radius: 16px;
+      margin-bottom: 32px;
+      box-shadow: 0 10px 25px -5px rgba(37, 99, 235, 0.2);
+    }
+    header h1 { font-size: 2.2rem; margin-bottom: 12px; }
+    header p { font-size: 1.1rem; opacity: 0.9; }
+    .badge {
+      display: inline-block;
+      padding: 4px 12px;
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 20px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-top: 12px;
+    }
+    .section-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 28px 32px;
+      margin-bottom: 24px;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    }
+    .section-card h2 {
+      font-size: 1.4rem;
+      color: #1e3a8a;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border-bottom: 2px solid var(--primary-light);
+      padding-bottom: 8px;
+    }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-top: 16px;
+    }
+    @media (max-width: 640px) {
+      .grid-2 { grid-template-columns: 1fr; }
+      body { padding: 12px; }
+      .section-card { padding: 20px 16px; }
+    }
+    .feature-box {
+      background: #f1f5f9;
+      padding: 16px;
+      border-radius: 10px;
+      border-left: 4px solid var(--primary);
+    }
+    .feature-box h3 { font-size: 1.05rem; margin-bottom: 6px; }
+    .tag {
+      display: inline-block;
+      font-size: 0.75rem;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-weight: bold;
+    }
+    .tag-blue { background: #dbeafe; color: #1e40af; }
+    .tag-green { background: #dcfce7; color: #15803d; }
+    .tag-amber { background: #fef3c7; color: #b45309; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 10px 14px;
+      text-align: left;
+      font-size: 0.95rem;
+    }
+    th {
+      background: #f8fafc;
+      color: #334155;
+    }
+    .dialogue-bubble {
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin: 8px 0;
+      font-family: monospace;
+      font-size: 0.9rem;
+    }
+    .btn {
+      display: inline-block;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-weight: 600;
+      text-decoration: none;
+      transition: all 0.2s;
+      margin-right: 12px;
+      margin-top: 8px;
+    }
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+    }
+    .btn-primary:hover { background: #1d4ed8; }
+    .btn-outline {
+      border: 1px solid var(--border);
+      background: white;
+      color: var(--text);
+    }
+    .btn-outline:hover { background: #f1f5f9; }
+    footer {
+      text-align: center;
+      padding: 24px;
+      color: var(--text-muted);
+      font-size: 0.9rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>智慧課堂筆記與待辦小秘書</h1>
+      <p>專為大學生設計的「1+2 整合模式」生活與課業智慧助理（改善版）</p>
+      <div class="badge">LINE Bot 改善版專題成果發表</div>
+    </header>
+
+    <!-- 一、專題介紹 -->
+    <div class="section-card" id="intro">
+      <h2>📌 一、專題介紹</h2>
+      <p><strong>【使用對象】</strong> 大學與研究生族群、跨課堂修課學生。</p>
+      <p><strong>【解決痛點】</strong> 解決課堂上老師投影片轉瞬即逝記不全、待辦事項四處零散忘記做、下課日常花費混亂漏記帳的日常三大困擾。</p>
+      <p><strong>【核心架構：1+2 整合模式】</strong></p>
+      <div class="grid-2">
+        <div class="feature-box">
+          <h3>📚 課堂筆記與智慧歸檔</h3>
+          <p>拍下投影片或傳送筆記，Gemini 自動摘要重點並存入雲端試算表；考前支援輸入「複習 [觀念]」由本地端 Gemma 4 模型進行 RAG 檢索回答。</p>
+        </div>
+        <div class="feature-box">
+          <h3>🗓️ 自然語意待辦與行事曆</h3>
+          <p>輸入「明天下午3點專案開會」，自動解析時間地點，同步寫入 Google 日曆與試算表「待辦事項」頁籤。</p>
+        </div>
+        <div class="feature-box">
+          <h3>💰 零碎記帳與今日查帳</h3>
+          <p>拍照收據或輸入「買午餐 100」，AI 自動分類歸納至「收支記帳簿」；輸入「查帳」秒算今日累計花費。</p>
+        </div>
+        <div class="feature-box">
+          <h3>⚡ 改善版專屬：Session Memory 撤回</h3>
+          <p>打錯字、記錯帳或新增錯誤時，不用翻找資料表，直接回覆「刪掉」，系統 1 秒自動復原並同步取消日曆！</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 二、改善版升級特點（前後差異） -->
+    <div class="section-card" id="improvement">
+      <h2>🚀 二、改善版升級重點與前後差異</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>項目</th>
+            <th>第一版（原本狀態）</th>
+            <th>改善版（本次升級成果）</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>問題痛點</strong></td>
+            <td>記錯帳或待辦寫錯時，無法直覺取消，需打開後台試算表手動刪除，容易漏掉日曆同步。</td>
+            <td>導入 <strong>CacheService 會話狀態記憶（Session Memory）</strong>，實現單字「刪掉」即秒撤銷。</td>
+          </tr>
+          <tr>
+            <td><strong>操作流程</strong></td>
+            <td>需輸入「刪除記帳 隱藏版特調」等冗長指令，若名稱不符則辨識失敗。</td>
+            <td>記帳或排程成功後，直接回「<strong>刪掉</strong>」或「<strong>打錯了</strong>」，機器人精準刪除最後一筆。</td>
+          </tr>
+          <tr>
+            <td><strong>跨服務連動</strong></td>
+            <td>僅能清理試算表，Google 日曆行程仍留在行事曆上造成誤會。</td>
+            <td>撤銷待辦事項時，自動透過 Calendar API <strong>同步刪除日曆對應活動</strong>。</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- 三、實測結果（親自測試三種情境） -->
+    <div class="section-card" id="test-results">
+      <h2>🧪 三、實測結果驗證</h2>
+      <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 12px;">依據作業規範，親自測試下列三種情境並保留紀錄：</p>
+      <table>
+        <thead>
+          <tr>
+            <th>測試情境</th>
+            <th>輸入內容</th>
+            <th>預期結果</th>
+            <th>實際結果</th>
+            <th>狀態</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>1. 正常使用</strong></td>
+            <td><code>明天下午3點期中報告討論</code></td>
+            <td>辨識出時間與事項，寫入試算表並於 Google 日曆建立行程。</td>
+            <td>回覆排程成功卡片，附帶試算表第 4 列與日曆連結。</td>
+            <td><span class="tag tag-green">測試通過</span></td>
+          </tr>
+          <tr>
+            <td><strong>2. 輸入不完整</strong></td>
+            <td><code>明天開會</code>（缺少具體時間）</td>
+            <td>提示使用者補充時間，或自動設為當日待辦事項。</td>
+            <td>成功辨識為全天待辦並排入日曆，同時回傳卡片提示具體時段。</td>
+            <td><span class="tag tag-green">測試通過</span></td>
+          </tr>
+          <tr>
+            <td><strong>3. 不支援的輸入</strong></td>
+            <td><code>隨便一串文字測試 / hello</code></td>
+            <td>不造成程式崩潰，提供清晰完整的使用提示選單。</td>
+            <td>立即回傳包含【待辦、記帳、筆記、查帳、複習】的完整指令說明指南。</td>
+            <td><span class="tag tag-green">測試通過</span></td>
+          </tr>
+          <tr>
+            <td><strong>4. 改善版驗證</strong></td>
+            <td>新增後直接回覆 <code>刪掉</code></td>
+            <td>讀取 Cache 撤銷上一動作，刪除試算表該列並取消日曆事件。</td>
+            <td>回傳「已成功撤銷並刪除：期中報告討論」，日曆活動同步移除。</td>
+            <td><span class="tag tag-green">測試通過</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- 四、AI 協作與審查修正 -->
+    <div class="section-card" id="ai-collaboration">
+      <h2>🤝 四、AI 協作與人類在環審查 (Human-in-the-Loop)</h2>
+      <p><strong>【使用的 AI 工具】</strong> Google Antigravity Agent (Claude 3.7 Sonnet / Gemini 3.5)</p>
+      <div style="margin-top: 12px;">
+        <p><strong>【代表性 Prompt 指令】</strong></p>
+        <div class="dialogue-bubble">
+          「當我記錯帳想刪除紀錄的時候，我希望是可以直接回覆那則記帳成功的訊息說『刪掉』，不管是記帳還是待辦事項都要支援，而且日曆也要同步刪除。」
+        </div>
+      </div>
+      <div style="margin-top: 16px;">
+        <p><strong>【檢查與修正 AI 產出的經驗（關鍵糾錯）】</strong></p>
+        <ul style="padding-left: 20px; margin-top: 8px;">
+          <li><strong>限制修正（LINE 引用限制）</strong>：AI 原先設計透過 LINE Quote Reply 傳回的引用文字判斷，經查證發現 LINE Webhook 僅傳送 <code>quotedMessageId</code> 而無內文。經討論後引導 AI 改用 <strong>Apps Script CacheService</strong> 記錄 10 分鐘會話狀態，完美解決平台限制。</li>
+          <li><strong>標籤識別要求</strong>：在本地 RAG 檢索串接時，使用者主動要求本地 Gemma 回覆必須冠上「🔍」前綴，以明確區隔本地離線回答與雲端 Gemini 回覆。</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- 五、心得與限制 -->
+    <div class="section-card" id="reflections">
+      <h2>💡 五、心得、已知限制與未來規劃</h2>
+      <div class="grid-2">
+        <div class="feature-box">
+          <h3>學習心得</h3>
+          <p>體會到「自然語言即介面（LUI）」的便利，善用 Cache 機制彌補 Webhook 無狀態特性的重要性，並掌握混和雲端（GAS + Gemini）與本機（Ollama + Cloudflare）的邊緣運算優勢。</p>
+        </div>
+        <div class="feature-box">
+          <h3>已知限制與下一步</h3>
+          <p>目前「刪掉」會話快取時效設定為 10 分鐘，超過需指定關鍵字；未來計畫導入 LINE Flex Message 互動按鈕直接附在完成通知卡片下方，體驗更直觀。</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 六、成果與專案連結 -->
+    <div class="section-card" id="links">
+      <h2>🔗 六、專案成果連結與查閱</h2>
+      <p>所有程式原始碼、配置檔與報告文件均已發布至公開 GitHub 專案庫：</p>
+      <div style="margin-top: 16px;">
+        <a class="btn btn-primary" href="https://github.com/VIKYEH/study-note-bot" target="_blank">📂 GitHub 專案庫 (VIKYEH/study-note-bot)</a>
+        <a class="btn btn-outline" href="presentation.html" target="_blank">🖥️ 90秒成果簡報頁面</a>
+      </div>
+    </div>
+
+    <footer>
+      <p>專題名稱：智慧課堂筆記與待辦小秘書 | 繳交時間：2026年11月</p>
+    </footer>
+  </div>
+</body>
+</html>
