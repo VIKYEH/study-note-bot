@@ -1,16 +1,18 @@
 /**
- * LINE 智慧大學生活與課堂全能助理（期中專題完整版）
+ * LINE 智慧大學生活與課堂全能助理（記憶暫存秒撤回版）
  * 核心特色：
- *   1. 【課堂筆記本】分頁：
+ *   1. 【智慧上下文記憶 (Session Memory)】：
+ *      - 記帳或存筆記成功後，系統自動記住最後一筆操作。
+ *      - 只要輸入「刪掉」、「刪除」、「打錯了」、「不要了」，立刻精準撤回上一筆，絕不鬼打牆追問！
+ *   2. 【課堂筆記本】分頁：
  *      - 存筆記：輸入「筆記 ...」或拍簡報照片，自動萃取重點存入試算表並備份本機。
  *      - 查筆記：輸入「查詢筆記 機器學習」或「筆記清單」，秒列符合的筆記列表與照片連結！
- *      - 刪筆記：輸入「刪除上一筆筆記」或「刪除筆記 關鍵字」，直接秒刪不廢話！
- *   2. 【考前秒複習】：輸入「複習 ...」，透由安全通道呼叫本機小模型 (Gemma 4) 全文檢索本地筆記並標註出處回答。
- *   3. 【收支記帳簿】分頁：
+ *      - 刪筆記：支援關鍵字模糊刪除（如「刪除隱藏版特調的筆記」）。
+ *   3. 【考前秒複習】：輸入「複習 ...」，透由安全通道呼叫本機小模型 (Gemma 4) 全文檢索本地筆記並標註出處回答。
+ *   4. 【收支記帳簿】分頁：
  *      - 記帳：輸入「記帳 午餐 100」或拍發票明細，自動歸類寫入同試算表。
  *      - 查帳：輸入「查帳」或「今天花了多少」秒算今日花費。
- *      - 刪記帳：輸入「刪除上一筆記帳」即刻撤回誤記。
- *   4. 【待辦事項】分頁：自然語言排程，自動分析日期時間寫入試算表並同步 Google 日曆。
+ *   5. 【待辦事項】分頁：自然語言排程，自動分析日期時間寫入試算表並同步 Google 日曆。
  */
 
 const PROPS = PropertiesService.getScriptProperties();
@@ -29,7 +31,7 @@ const CHECK_EXPENSE = /^(?:查帳|今天花了多少|今日花費|總花費|記�
 
 const TZ = "Asia/Taipei";
 const GREETING = /^(hi|hello|hey|你好|嗨|哈囉|安安|早安|午安|晚安|謝謝|感謝|ok|好的|掰|bye|test|測試)$/i;
-const HELP_TEXT = "你好！我是你的【智慧生活與課堂全能助理】🎓💰\n\n同一個試算表幫你管好四大生活需求：\n\n1. 📖 存筆記：「筆記 機器學習三要素是...」或拍簡報照片\n2. 📑 查筆記：「查詢筆記 機器學習」或「筆記清單」列出摘要與照片\n3. 🗑️ 刪筆記：「刪除上一筆筆記」或「刪除筆記 [關鍵字]」\n4. 🔍 考前複習：「複習 機器學習三要素是什麼？」本機模型秒回答\n5. 💸 記帳：「記帳 午餐 100」或拍發票明細（支援「刪除上一筆記帳」）\n6. 📊 查帳：「查帳」或「今天花了多少」\n7. 🗓️ 待辦：「明天下午三點要開會」自動排日曆";
+const HELP_TEXT = "你好！我是你的【智慧生活與課堂全能助理】🎓💰\n\n三大核心功能：\n\n1. 💸 記帳：輸入「記帳 午餐 100」或拍發票（記錯直接打「刪掉」秒撤回！）\n2. 📖 筆記：「筆記 機器學習三要素是...」或拍簡報照片\n3. 📑 查筆記：「查詢筆記 機器學習」或「筆記清單」\n4. 🔍 考前複習：「複習 機器學習三要素是什麼？」本機模型秒回答\n5. 📊 查帳：「查帳」或「今天花了多少」\n6. 🗓️ 待辦：「明天下午三點要開會」自動排日曆";
 
 function doPost(e) {
   try {
@@ -42,32 +44,46 @@ function doPost(e) {
 }
 
 function doGet() {
-  return ContentService.createTextOutput("全能助理運作中（筆記 ✕ 記帳 ✕ 待辦 ✕ 刪除 完整版）");
+  return ContentService.createTextOutput("全能助理運作中（記憶暫存秒撤回 ✕ 筆記檢索 ✕ 記帳 整合版）");
 }
 
 function handleEvent(event) {
   if (event.type !== "message" || !event.replyToken) return;
   try {
     const msg = event.message;
+    const userId = (event.source && event.source.userId) || "default_user";
+
     if (msg.type === "text") {
       const text = msg.text.trim();
       if (GREETING.test(text)) return replyLine(event.replyToken, HELP_TEXT);
 
-      // 分支 1：刪除筆記功能 (精準刪除，不卡死問答)
-      if (/^(?:刪除最後一筆筆記|刪除上一筆筆記|刪除這則筆記|刪除筆記)$/.test(text)) {
+      // ===== 🎯 神級秒撤回：只要打「刪掉/刪除/取消/打錯了」立刻精準撤回！ =====
+      if (/^(?:刪除|刪掉|刪|不要了|取消|撤回|打錯了|記錯了|刪除這則|刪掉這筆)$/.test(text)) {
         showLoading(event.source);
-        return replyLine(event.replyToken, deleteLastRowFromSheet("課堂筆記本"));
-      }
-      const delNoteMatch = text.match(/^(?:刪除筆記|刪筆記)[\s:：]+([\s\S]+)$/);
-      if (delNoteMatch) {
-        showLoading(event.source);
-        return replyLine(event.replyToken, deleteNoteByKeyword(delNoteMatch[1].trim()));
+        return replyLine(event.replyToken, undoLastAction(userId));
       }
 
-      // 分支 2：刪除記帳功能
-      if (/^(?:刪除最後一筆記帳|刪除上一筆記帳|刪除記帳)$/.test(text)) {
+      // 模糊刪除筆記（包含「刪」和「筆記」）
+      if (/刪.*筆記/.test(text)) {
         showLoading(event.source);
-        return replyLine(event.replyToken, deleteLastRowFromSheet("收支記帳簿"));
+        const kw = text.replace(/刪[除掉]?|筆記|的?紀錄|這則|最後|上一筆/g, "").trim();
+        return replyLine(event.replyToken, deleteNoteByKeyword(kw));
+      }
+
+      // 模糊刪除記帳（包含「刪」和「帳/花費/支出」）
+      if (/刪.*(帳|花費|支出|消費)/.test(text)) {
+        showLoading(event.source);
+        const kw = text.replace(/刪[除掉]?|記帳|花費|支出|消費|的?紀錄|最後|上一筆/g, "").trim();
+        return replyLine(event.replyToken, deleteExpenseByKeyword(kw));
+      }
+
+      // 刪除特定關鍵字（如：刪除隱藏版特調的紀錄）
+      if (/^刪[除掉]/.test(text)) {
+        showLoading(event.source);
+        const kw = text.replace(/^刪[除掉]?|的?紀錄|這則/g, "").trim();
+        const noteRes = deleteNoteByKeyword(kw);
+        if (!noteRes.includes("找不到")) return replyLine(event.replyToken, noteRes);
+        return replyLine(event.replyToken, deleteExpenseByKeyword(kw));
       }
 
       // 分支 3：考前複習 / 本機問答 (由本機 Gemma 4 推論)
@@ -88,7 +104,7 @@ function handleEvent(event) {
       const noteMatch = text.match(NOTE_PREFIX);
       if (noteMatch) {
         showLoading(event.source);
-        return saveNoteAndReply(event.replyToken, noteMatch[1].trim(), "手動輸入");
+        return saveNoteAndReply(event.replyToken, noteMatch[1].trim(), "手動輸入", null, null, userId);
       }
 
       // 分支 6：查帳（今日消費統計）
@@ -104,7 +120,7 @@ function handleEvent(event) {
         const expenseContent = expenseMatch ? expenseMatch[1].trim() : text;
         const parsedExpense = askGeminiAboutExpense(expenseContent);
         if (parsedExpense.isExpense) {
-          return saveExpenseAndReply(event.replyToken, parsedExpense);
+          return saveExpenseAndReply(event.replyToken, parsedExpense, null, userId);
         }
       }
 
@@ -117,12 +133,11 @@ function handleEvent(event) {
       showLoading(event.source);
       const image = downloadLineImage(msg.id);
       const photoUrl = savePhotoToDrive(image);
-      // AI 智慧分析圖片
       const analysis = askGeminiAboutImage(image);
       if (analysis.type === "expense") {
-        return saveExpenseAndReply(event.replyToken, analysis, photoUrl);
+        return saveExpenseAndReply(event.replyToken, analysis, photoUrl, userId);
       } else if (analysis.type === "note") {
-        return saveNoteAndReply(event.replyToken, analysis.noteContent, "拍照識別", photoUrl, analysis.summary);
+        return saveNoteAndReply(event.replyToken, analysis.noteContent, "拍照識別", photoUrl, analysis.summary, userId);
       }
       return saveAndReply(event.replyToken, analysis, "照片", photoUrl);
     }
@@ -157,29 +172,100 @@ function getSheet(sheetName) {
   return sheet;
 }
 
-// ===== 刪除功能 =====
-function deleteLastRowFromSheet(sheetName) {
-  const sheet = getSheet(sheetName);
-  const lastRow = sheet.getLastRow();
-  if (lastRow <= 1) return `⚠️「${sheetName}」目前沒有任何資料可供刪除喔！`;
-  
-  const title = sheet.getRange(lastRow, 2).getValue();
-  sheet.deleteRow(lastRow);
-  return `🗑️ 已成功刪除「${sheetName}」最後一筆紀錄：【${title}】！`;
+// ===== 🧠 記憶暫存管理 (Session Memory) =====
+function setLastAction(userId, sheetName, row, desc) {
+  const cache = CacheService.getUserCache();
+  cache.put("LAST_ACTION_" + userId, JSON.stringify({ sheetName, row, desc }), 600); // 記住 10 分鐘
+}
+
+function getLastAction(userId) {
+  const cache = CacheService.getUserCache();
+  const raw = cache.get("LAST_ACTION_" + userId);
+  return raw ? JSON.parse(raw) : null;
+}
+
+function clearLastAction(userId) {
+  CacheService.getUserCache().remove("LAST_ACTION_" + userId);
+}
+
+// 智慧秒撤回函式
+function undoLastAction(userId) {
+  const last = getLastAction(userId);
+  if (last && last.sheetName && last.row) {
+    try {
+      const sheet = getSheet(last.sheetName);
+      if (sheet.getLastRow() >= last.row) {
+        sheet.deleteRow(last.row);
+        clearLastAction(userId);
+        return `🗑️ 已成功撤回並刪除【${last.desc}】！`;
+      }
+    } catch (e) {}
+  }
+
+  // 若快取無紀錄，預設安全刪除記帳簿最後一筆
+  return deleteLastExpenseOrNote();
+}
+
+function deleteLastExpenseOrNote() {
+  const expSheet = getSheet("收支記帳簿");
+  const expLast = expSheet.getLastRow();
+  if (expLast > 1) {
+    const item = expSheet.getRange(expLast, 2).getValue();
+    const amount = expSheet.getRange(expLast, 3).getValue();
+    expSheet.deleteRow(expLast);
+    return `🗑️ 已成功撤回並刪除最新一筆記帳紀錄：【${item} $${amount}元】！`;
+  }
+
+  const noteSheet = getSheet("課堂筆記本");
+  const noteLast = noteSheet.getLastRow();
+  if (noteLast > 1) {
+    const title = noteSheet.getRange(noteLast, 2).getValue();
+    noteSheet.deleteRow(noteLast);
+    return `🗑️ 已成功撤回並刪除最新一筆筆記紀錄：【${title}】！`;
+  }
+
+  return "⚠️ 目前記帳簿與筆記本都沒有紀錄可以刪除喔！";
 }
 
 function deleteNoteByKeyword(keyword) {
   const sheet = getSheet("課堂筆記本");
   const data = sheet.getDataRange().getValues();
+  if (!keyword) return deleteLastRowFromSheet("課堂筆記本");
+
   for (let i = data.length - 1; i >= 1; i--) {
     const title = String(data[i][1]);
     const content = String(data[i][2]);
     if (title.includes(keyword) || content.includes(keyword)) {
       sheet.deleteRow(i + 1);
-      return `🗑️ 已找到並成功刪除筆記：【${title}】！`;
+      return `🗑️ 已成功找到並刪除筆記：【${title}】！`;
     }
   }
   return `🔍 在筆記本中找不到包含「${keyword}」的筆記。`;
+}
+
+function deleteExpenseByKeyword(keyword) {
+  const sheet = getSheet("收支記帳簿");
+  const data = sheet.getDataRange().getValues();
+  if (!keyword) return deleteLastRowFromSheet("收支記帳簿");
+
+  for (let i = data.length - 1; i >= 1; i--) {
+    const item = String(data[i][1]);
+    const amount = data[i][2];
+    if (item.includes(keyword)) {
+      sheet.deleteRow(i + 1);
+      return `🗑️ 已成功找到並刪除記帳：【${item} $${amount}元】！`;
+    }
+  }
+  return `🔍 在記帳簿中找不到包含「${keyword}」的紀錄。`;
+}
+
+function deleteLastRowFromSheet(sheetName) {
+  const sheet = getSheet(sheetName);
+  const lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return `⚠️「${sheetName}」目前沒有紀錄可供刪除喔！`;
+  const name = sheet.getRange(lastRow, 2).getValue();
+  sheet.deleteRow(lastRow);
+  return `🗑️ 已成功刪除「${sheetName}」最後一筆：【${name}】！`;
 }
 
 // ===== 查詢筆記功能 =====
@@ -219,15 +305,18 @@ function queryNotesFromSheet(keyword) {
 }
 
 // ===== 記帳功能處理 =====
-function saveExpenseAndReply(replyToken, expense, photoUrl) {
+function saveExpenseAndReply(replyToken, expense, photoUrl, userId) {
   const sheet = getSheet("收支記帳簿");
   const now = Utilities.formatDate(new Date(), TZ, "yyyy-MM-dd HH:mm:ss");
   sheet.appendRow([now, expense.item, expense.amount, expense.category, expense.note || "", photoUrl || ""]);
   const row = sheet.getLastRow();
 
+  // 🧠 存入上下文記憶！
+  setLastAction(userId, "收支記帳簿", row, `${expense.item} $${expense.amount}元`);
+
   let reply = `💸 記帳成功！（記帳簿第 ${row} 列）\n\n🛒 品項：${expense.item}\n💵 金額：$${expense.amount} 元\n🏷️ 分類：${expense.category}`;
   if (photoUrl) reply += "\n🧾 發票照片已存入 Google Drive";
-  reply += "\n\n💡 提示：輸入「今天花了多少」隨時查看累計花費！若記錯可打「刪除上一筆記帳」";
+  reply += "\n\n💡 提示：若記錯，直接傳「刪掉」即可秒撤回！輸入「今天花了多少」隨時查帳。";
   replyLine(replyToken, reply);
 }
 
@@ -262,17 +351,21 @@ function askGeminiAboutExpense(text) {
 }
 
 // ===== 筆記功能處理 =====
-function saveNoteAndReply(replyToken, content, source, photoUrl, summary) {
+function saveNoteAndReply(replyToken, content, source, photoUrl, summary, userId) {
   const ss = getSheet("課堂筆記本");
   const now = Utilities.formatDate(new Date(), TZ, "yyyy-MM-dd HH:mm:ss");
   const title = summary || content.slice(0, 20).replace(/[\r\n]/g, " ");
   ss.appendRow([now, title, content, source, photoUrl || ""]);
+  const row = ss.getLastRow();
+
+  // 🧠 存入上下文記憶！
+  setLastAction(userId, "課堂筆記本", row, `筆記【${title}】`);
 
   syncNoteToLocal(title, content);
 
   let reply = `📝 筆記已成功儲存至試算表！\n\n📌 摘要：${title}\n📖 內容：${content.slice(0, 100)}${content.length > 100 ? "..." : ""}`;
   if (photoUrl) reply += "\n📷 筆記照片已備份至 Google Drive";
-  reply += "\n\n💡 提示：若想刪除可打「刪除上一筆筆記」；輸入「複習 " + title.slice(0, 6) + "」考考小秘書！";
+  reply += "\n\n💡 提示：若想刪除直接傳「刪掉」；傳「複習 " + title.slice(0, 4) + "」考考小秘書！";
   replyLine(replyToken, reply);
 }
 
