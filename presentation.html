@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>智慧課堂筆記與待辦小秘書 - 期中專題展示簡報</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 40px; }
+  .slide { background: #1e293b; border-radius: 16px; padding: 40px 60px; margin-bottom: 40px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3); border: 1px solid #334155; max-width: 900px; margin-left: auto; margin-right: auto; }
+  .tag { display: inline-block; background: #0284c7; color: white; padding: 4px 12px; border-radius: 9999px; font-size: 14px; font-weight: bold; margin-bottom: 12px; }
+  h1 { font-size: 32px; color: #38bdf8; margin-top: 0; }
+  h2 { font-size: 24px; color: #e2e8f0; border-bottom: 2px solid #38bdf8; padding-bottom: 8px; margin-bottom: 24px; }
+  p, li { font-size: 18px; line-height: 1.6; color: #cbd5e1; }
+  .highlight { color: #f59e0b; font-weight: bold; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px; }
+  .card { background: #0f172a; padding: 20px; border-radius: 12px; border: 1px solid #334155; }
+  .card h3 { margin-top: 0; color: #38bdf8; font-size: 18px; }
+  .footer { text-align: right; color: #64748b; font-size: 14px; margin-top: 20px; }
+</style>
+</head>
+<body>
+
+<div class="slide">
+  <span class="tag">Page 1 / 3 ｜ 題目與痛點 (0-25s)</span>
+  <h1>智慧課堂筆記與待辦小秘書 (Study Note Bot)</h1>
+  <p class="highlight">雲端 24H 隨手記 ✕ 本地小語言模型 (SLM) 考前秒複習</p>
+  <div class="grid">
+    <div class="card">
+      <h3>❌ 學生日常三大痛點</h3>
+      <ul>
+        <li>上課拍了一堆簡報和黑板，期末相簿大混亂</li>
+        <li>考前複習缺乏互動檢索，翻簡報耗時費力</li>
+        <li>用商業雲端 AI 要付費，且個人筆記有外洩疑慮</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>💡 1+2 雙向整合解決方案</h3>
+      <ul>
+        <li><b>上課存筆記</b>：LINE 打字或拍照，雲端秒歸檔試算表</li>
+        <li><b>考前問筆記</b>：手機問一句，本機模型檢索筆記秒回答</li>
+        <li><b>日常排程</b>：自動辨識日期時間，排入 Google 日曆</li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer">期中專案展示 ｜ GitHub: VIKYEH/study-note-bot</div>
+</div>
+
+<div class="slide">
+  <span class="tag">Page 2 / 3 ｜ 系統架構與技術特點 (25-55s)</span>
+  <h2>混合雲端與邊緣推論架構 (Hybrid Cloud + Edge AI)</h2>
+  <div class="card" style="margin-bottom: 20px;">
+    <p><b>資料流動架構</b>：<br>
+    <code>手機 LINE</code> ➔ <code>Apps Script 雲端核心 (/exec)</code> ➔ <code>Cloudflare 安全通道</code> ➔ <code>個人筆電本地轉接站 (Node.js)</code> ➔ <code>本地筆記庫 RAG + Gemma 4 推論</code></p>
+  </div>
+  <div class="grid">
+    <div class="card">
+      <h3>🛡️ 隱私安全與零成本</h3>
+      <p>採用 Google 開源 <b>Gemma 4 (2B)</b> 小模型，純靠電腦 Intel CPU 推論，個人筆記不出電腦、不花任何 API 費用！</p>
+    </div>
+    <div class="card">
+      <h3>🔍 本地 RAG 檢索增強生成</h3>
+      <p>模型回答絕不胡亂瞎猜，自動比對 <code>notes/</code> 目錄，精準摘要筆記並在回覆時清楚註明出處！</p>
+    </div>
+  </div>
+  <div class="footer">期中專案展示 ｜ 純 CPU 本機推論實測僅需 8 秒</div>
+</div>
+
+<div class="slide">
+  <span class="tag">Page 3 / 3 ｜ 實測成果與退回紀錄 (55-90s)</span>
+  <h2>現場操作展示與協同開發成果</h2>
+  <div class="grid">
+    <div class="card">
+      <h3>📱 現場實測驗證</h3>
+      <ul>
+        <li><b>存筆記</b>：輸入「筆記 機器學習三要素...」➔ 試算表秒出新列</li>
+        <li><b>問筆記</b>：輸入「複習 什麼是機器學習三要素？」➔ 8 秒精確回覆，附出處標籤</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>🤝 AI 結對與退回修改</h3>
+      <ul>
+        <li><b>主動退回 AI</b>：要求在回覆開頭補上 <code>🔎</code> 放大鏡圖示，清晰辨識本地模型</li>
+        <li><b>異常排查</b>：解決 Windows CP950 編碼問題與通道 DNS 競態條件</li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer">智慧課堂筆記與待辦小秘書 ｜ 謝謝聆聽！</div>
+</div>
+
+</body>
+</html>
