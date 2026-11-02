@@ -13,7 +13,7 @@ const PORT = Number(process.env.PORT || 8787);
 const OLLAMA = process.env.OLLAMA_URL || "http://127.0.0.1:11434";
 const BUDGET_MS = 45000;
 const MAX_ROUNDS = 4;
-const KEY_FILE = join(homedir(), ".line-search-relay.key");
+const KEY_FILE = process.env.RELAY_KEY_FILE || join(process.cwd(), ".relay.key");
 const WANT_TUNNEL = !process.argv.includes("--no-tunnel");
 const NOTES_DIR = join(process.cwd(), "notes");
 
